@@ -1,0 +1,252 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Player Control & Ranking</title>
+
+<style>
+*{box-sizing:border-box}
+body{
+    margin:0;
+    font-family:Arial,sans-serif;
+    background:#101827;
+    color:white;
+    text-align:center;
+}
+header{padding:25px}
+h1{margin:10px}
+button{
+    border:0;
+    cursor:pointer;
+    font-weight:bold;
+    border-radius:12px;
+    padding:14px 22px;
+    font-size:16px;
+}
+.controls{
+    display:flex;
+    justify-content:center;
+    gap:35px;
+    flex-wrap:wrap;
+    margin:50px 10px;
+}
+.circle{
+    width:160px;
+    height:160px;
+    border-radius:50%;
+    color:white;
+    font-size:25px;
+    border:7px solid white;
+    box-shadow:0 0 25px #ffffff55;
+}
+.red{background:#e60023}
+.green{background:#00a84f}
+.dashboard-btn{background:#ffffff;color:#101827}
+#dashboard{display:none;padding:20px}
+.panel{
+    background:#1e293b;
+    padding:18px;
+    margin:18px auto;
+    max-width:700px;
+    border-radius:14px;
+    text-align:left;
+}
+.player{
+    background:#334155;
+    padding:12px;
+    margin:8px 0;
+    border-radius:8px;
+}
+.approve{background:#16a34a;color:white}
+#flash{
+    position:fixed;
+    inset:0;
+    z-index:100;
+    pointer-events:none;
+    opacity:0;
+}
+#flash.red-light{background:#ff0000;opacity:.75}
+#flash.green-light{background:#00ff55;opacity:.75}
+#flash{transition:opacity .15s}
+.back{background:#64748b;color:white}
+</style>
+</head>
+
+<body>
+
+<div id="flash"></div>
+
+<header>
+<h1>PLAYER CONTROL</h1>
+<p>RED / GREEN SYSTEM</p>
+</header>
+
+<div id="home">
+    <div class="controls">
+        <button class="circle red" id="redBtn">RED</button>
+        <button class="circle green" id="greenBtn">GREEN</button>
+    </div>
+
+    <button class="dashboard-btn" id="openDashboard">
+        OPEN DASHBOARD
+    </button>
+</div>
+
+<div id="dashboard">
+    <h1>PLAYER DASHBOARD</h1>
+
+    <div class="panel">
+        <h2>OK PLAYERS</h2>
+        <div id="okList"></div>
+    </div>
+
+    <div class="panel">
+        <h2>CANCEL PLAYERS</h2>
+        <div id="cancelList"></div>
+    </div>
+
+    <div class="panel">
+        <h2>FINAL RANKING</h2>
+        <button class="approve" id="finalBtn">OK - FINAL RANKING</button>
+        <div id="rankingList"></div>
+    </div>
+
+    <button class="back" id="backBtn">BACK TO HOME</button>
+</div>
+
+<!-- YOUR ORIGINAL MP3 FILES -->
+<audio id="redSound" src="red.mp3" preload="auto"></audio>
+<audio id="greenSound" src="green.mp3" preload="auto"></audio>
+
+<script>
+let okPlayers = JSON.parse(localStorage.getItem("okPlayers") || "[]");
+let cancelPlayers = JSON.parse(localStorage.getItem("cancelPlayers") || "[]");
+let rankings = JSON.parse(localStorage.getItem("rankings") || "[]");
+
+const redSound = document.getElementById("redSound");
+const greenSound = document.getElementById("greenSound");
+
+function saveData(){
+    localStorage.setItem("okPlayers",JSON.stringify(okPlayers));
+    localStorage.setItem("cancelPlayers",JSON.stringify(cancelPlayers));
+    localStorage.setItem("rankings",JSON.stringify(rankings));
+}
+
+function flash(color){
+    return new Promise(resolve=>{
+        const screen=document.getElementById("flash");
+        screen.className=color+"-light";
+        setTimeout(()=>{
+            screen.className="";
+            resolve();
+        },3000);
+    });
+}
+
+async function playPlayerSound(color){
+    const audio = color==="red" ? redSound : greenSound;
+
+    audio.pause();
+    audio.currentTime=0;
+
+    const soundPromise = audio.play();
+    const lightPromise = flash(color);
+
+    try{
+        await Promise.all([soundPromise,lightPromise]);
+    }catch(error){
+        await lightPromise;
+        alert("MP3 sound play nahi hui. File ka naam aur folder check karo.");
+        return false;
+    }
+    return true;
+}
+
+async function selectPlayer(color){
+    const audio = color==="red" ? redSound : greenSound;
+
+    audio.pause();
+    audio.currentTime=0;
+
+    const soundPromise=audio.play();
+    const lightPromise=flash(color);
+
+    try{
+        await Promise.all([soundPromise,lightPromise]);
+    }catch(error){
+        await lightPromise;
+        alert("MP3 file nahi chal saki. File name aur location check karo.");
+        return;
+    }
+
+    const name=prompt("Player ka naam likhein:");
+    if(!name || !name.trim()) return;
+
+    if(color==="red"){
+        cancelPlayers.push({name:name.trim()});
+    }else{
+        const marks=prompt("Player ke marks likhein:");
+        if(marks===null || marks.trim()==="" || isNaN(marks) || Number(marks)<0){
+            alert("Sahi marks enter karein.");
+            return;
+        }
+        okPlayers.push({
+            name:name.trim(),
+            marks:Number(marks)
+        });
+    }
+
+    saveData();
+    render();
+}
+
+document.getElementById("redBtn").onclick=()=>selectPlayer("red");
+document.getElementById("greenBtn").onclick=()=>selectPlayer("green");
+
+document.getElementById("openDashboard").onclick=()=>{
+    document.getElementById("home").style.display="none";
+    document.getElementById("dashboard").style.display="block";
+    render();
+};
+
+document.getElementById("backBtn").onclick=()=>{
+    document.getElementById("dashboard").style.display="none";
+    document.getElementById("home").style.display="block";
+};
+
+document.getElementById("finalBtn").onclick=()=>{
+    rankings=[...okPlayers].sort((a,b)=>b.marks-a.marks);
+    saveData();
+    render();
+};
+
+function safe(value){
+    return String(value).replace(/[&<>"']/g,c=>({
+        "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+    }[c]));
+}
+
+function render(){
+    document.getElementById("okList").innerHTML=
+        okPlayers.length ? okPlayers.map((p,i)=>
+        `<div class="player">${i+1}. ${safe(p.name)} — ${p.marks} marks</div>`
+        ).join("") : "No OK players yet.";
+
+    document.getElementById("cancelList").innerHTML=
+        cancelPlayers.length ? cancelPlayers.map((p,i)=>
+        `<div class="player">${i+1}. ${safe(p.name)}</div>`
+        ).join("") : "No cancelled players yet.";
+
+    document.getElementById("rankingList").innerHTML=
+        rankings.length ? rankings.map((p,i)=>
+        `<div class="player">🏆 ${i+1}. ${safe(p.name)} — ${p.marks} marks</div>`
+        ).join("") : "Final ranking abhi nahi bani.";
+}
+
+render();
+</script>
+
+</body>
+</html>
